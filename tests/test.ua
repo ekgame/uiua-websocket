@@ -1,43 +1,43 @@
 # Experimental!
 
 ~ "../lib.ua"
-  ~ BuildFrame! BuildMaskedFrame! MaskingKey Opcode Payload
+  ~ BuildWsFrame! SetWsFrameMaskingKey SetWsFrameOpcode SetWsFramePayload
   ~ ReadWebsocketFrame WebsocketFrameToBytes
 
 ⍜(&fo "./tests/test-frame-short-unmasked.bin")(
   ReadWebsocketFrame
-  BuildFrame!(
-    Opcode 1
-    Payload utf"Hello"
+  BuildWsFrame!(
+    SetWsFrameOpcode 1
+    SetWsFramePayload utf"Hello"
   )
   ⍤ "Failed to parse frame." ≍
 )
 
 ⍜(&fo "./tests/test-frame-short-unmasked.bin")(
   &rb ∞
-  WebsocketFrameToBytes BuildFrame!(
-    Opcode 1
-    Payload utf"Hello"
+  WebsocketFrameToBytes BuildWsFrame!(
+    SetWsFrameOpcode 1
+    SetWsFramePayload utf"Hello"
   )
   ⍤ "Failed to encode frame." ≍
 )
 
 ⍜(&fo "./tests/test-frame-short-masked.bin")(
   ReadWebsocketFrame
-  BuildMaskedFrame!(
-    Opcode 1
-    MaskingKey [55 250 33 61]
-    Payload utf"Hello"
+  BuildWsFrame!(
+    SetWsFrameOpcode 1
+    SetWsFrameMaskingKey [55 250 33 61]
+    SetWsFramePayload utf"Hello"
   )
   ⍤ "Failed to parse frame." ≍
 )
 
 ⍜(&fo "./tests/test-frame-short-masked.bin")(
   &rb ∞
-  WebsocketFrameToBytes BuildMaskedFrame!(
-    Opcode 1
-    MaskingKey [55 250 33 61]
-    Payload utf"Hello"
+  WebsocketFrameToBytes BuildWsFrame!(
+    SetWsFrameOpcode 1
+    SetWsFrameMaskingKey [55 250 33 61]
+    SetWsFramePayload utf"Hello"
   )
   ⍤ "Failed to encode frame." ≍
 )

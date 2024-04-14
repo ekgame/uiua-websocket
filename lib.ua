@@ -6,6 +6,8 @@
 
 Uri ~ "git: github.com/ekgame/uiua-uri-parser"
 
+~ "./struct.ua" ~ Struct!
+
 OpcodeContinuation ← 0
 OpcodeText ← 1
 OpcodeBinary ← 2
@@ -13,27 +15,10 @@ OpcodeClose ← 8
 OpcodePing ← 9
 OpcodePong ← 10
 
-Struct! ↚^ (
-  ◇⟜(⍚⊂¤)°⊂
-  □$"_ ← {_}\n":⊂⊃(↯:@⊙-1|↯:@∘±)⧻,
-  ⍚$"_ ← °□⊡_\n":⇡⧻.:
-  ⊂:
-)
-Struct!(WsFrame|IsFinalFragment|Opcode|IsMasked|PayloadLength|MaskingKey|Payload)
-
-DefaultFrame ← (WsFrame 1 OpcodeText 0 0 0 [])
-BuildFrame! ← ^! DefaultFrame
-
-RandomByte ← (⌊×256⚂)
-DefaultMaskedFrame ← (WsFrame 1 OpcodeText 1 0 [⍥RandomByte 4] [])
-BuildMaskedFrame! ← ^! DefaultMaskedFrame
-
-Opcode ← ⍜(WsFrameOpcode)(◌):
-MaskingKey ← ⍜(WsFrameMaskingKey)(◌):
-Payload ← (
-  ⍜(WsFramePayload)(◌):⊙:.
-  ⍜(WsFramePayloadLength)(◌):⧻:
-)
+Struct!(WsFrame|IsFinal|Opcode|MaskingKey|Payload)
+Struct!(Private|WsFrameMetadata|IsMasked|PayloadLength)
+BuildWsFrame! ← ^! SetWsFrameIsFinal 1 EmptyWsFrame
+BuildMaskedWsFrame! ← ^! SetWsFrameIsFinal 1 EmptyWsFrame
 
 FormatAddress ← $"_:_" ∩°□⊃(get "domain")(get "port")
 StreamReadLine ← ↘¯2◌:⍢(⊂:⊙:&rs1.:)(¬≍ "\r\n" ⬚@ ↙¯2)""
@@ -72,7 +57,7 @@ CreateWebsocketConnection ← (
 )
 
 Xor ← °⋯≠∩(⬚0↙8⋯)
-ApplyMask ← ∵Xor⊏⊙:◿4⇡⧻.:
+ApplyMasking ← ∵Xor⊏⊙:◿4⇡⧻.:
 ShiftLeft ← °⋯⍥(⊂0):⋯:
 
 ByteArrayToInt ← /+≡ShiftLeft×8⇡⧻.
@@ -81,63 +66,64 @@ ReadInt ← ByteArrayToInt ⇌&rb 4
 ReadLong ← ByteArrayToInt ⇌&rb 8
 
 ReadWebsocketFrame ← (
-  :{}
+  ⊙(EmptyWsFrameMetadata)
+  ⊙(EmptyWsFrame)
   ⟜(
-    ⬚0↙8⋯ ⊢&rb 1
+    ⬚0↙8⋯⊢&rb1
     # Is Final flag
-    :⊂:□⊙: °⊂⇌
+    ⊃(⋅∘|SetWsFrameIsFinal⊙⋅∘) °⊂⇌
     # Opcode
-    ⊂:□°⋯⇌
+    SetWsFrameOpcode °⋯⇌
   )
   ⟜(
-    ⬚0↙8⋯ ⊢&rb 1
+    ⬚0↙8⋯⊢&rb1
     # Is Masked flag
-    :⊂:□⊙: °⊂⇌
+    ⊃(⋅⊙∘|SetWsFrameMetadataIsMasked⊙⋅⋅∘)°⊂⇌
     # Payload length
-    ⊂:□°⋯⇌
+    ⊃(⋅∘|SetWsFrameMetadataPayloadLength⊙⋅∘)°⋯⇌
   )
   ⟜(
     # Extended payload length
-    :⊙(WsFramePayloadLength.)
+    ⊃(GetWsFrameMetadataPayloadLength⋅⋅∘|⊙⊙∘)
     ⊗:[126 127].
     ⟨ReadShort ◌|ReadLong ◌|⊙◌⟩
-    ⍜⊙(WsFramePayloadLength)(◌)
+    ⊃(⋅∘|SetWsFrameMetadataPayloadLength⊙⋅∘)
   )
   ⟜(
-    # Mask key
-    ⊙:WsFrameIsMasked.:
-    ⊂:⟨0|□&rb4⟩
+    # Masking Kky
+    ⊃(GetWsFrameMetadataIsMasked⋅⋅∘|⊙⊙∘)
+    SetWsFrameMaskingKey ⟨0|&rb4⟩
   )
-  # Payload
-  &rb ⊙:WsFramePayloadLength.:
-  # Unmask payload
-  ⊙:WsFrameIsMasked.:
-  ⊂:□⍥(ApplyMask WsFrameMaskingKey:⊙.)
+
+  &rb ⊃(GetWsFrameMetadataPayloadLength⋅⋅∘|⊙⊙∘)
+  ⊃(GetWsFrameMetadataIsMasked⋅⋅∘|⊙⊙∘)
+  SetWsFramePayload ⍥(ApplyMasking ⊃(GetWsFrameMaskingKey ⋅∘|⊙∘))
+  ⊙◌
 )
 
 WebsocketFrameToBytes ← (
   :[]
   # First byte (fin, opcode)
-  ⟜(⬚0↙7 ⋯WsFrameOpcode)
-  ⟜(⊂:WsFrameIsFinalFragment)
+  ⟜(⬚0↙7 ⋯GetWsFrameOpcode)
+  ⟜(⊂:GetWsFrameIsFinal)
   ⊙(⊂:°⋯)
 
   # Second byte (masked, payload length)
-  ⟜(⬚0↙7 ⋯WsFramePayloadLength)
-  ⟜(⊂:WsFrameIsMasked)
+  ⟜(⬚0↙7 ⋯⧻ GetWsFramePayload)
+  ⟜(⊂:¬≍0GetWsFrameMaskingKey)
   ⊙(⊂:°⋯)
 
   # TODO: Extended payload length
 
   # Masking key
   ⟜(
-    WsFrameIsMasked.
-    ⟨◌|⊂:WsFrameMaskingKey⟩
+    ¬≍0GetWsFrameMaskingKey.
+    ⟨◌|⊂:GetWsFrameMaskingKey⟩
   )
 
   # Payload
-  WsFrameIsMasked.
-  ⊂: ⟨WsFramePayload|ApplyMask ⊃(WsFrameMaskingKey|WsFramePayload)⟩
+  ¬≍0GetWsFrameMaskingKey.
+  ⊂: ⟨GetWsFramePayload|ApplyMasking ⊃(GetWsFrameMaskingKey|GetWsFramePayload)⟩
 )
 
 SendFrame ← &w WebsocketFrameToBytes
